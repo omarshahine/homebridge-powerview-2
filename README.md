@@ -1,10 +1,39 @@
-# homebridge-powerview-2
-[![npm](https://img.shields.io/npm/v/homebridge-powerview-2.svg)](https://www.npmjs.com/package/homebridge-powerview-2)
-[![npm](https://img.shields.io/npm/dt/homebridge-powerview-2.svg)](https://www.npmjs.com/package/homebridge-powerview-2)
+# homebridge-powerview-2 (omarshahine fork)
 
-**The PowerView homekit integration worked too slow for me and was unresponsive a lot of times thats why i forked this old plugin and made it kinda working again**
+Personal fork of [`owenselles/homebridge-powerview-2`](https://github.com/owenselles/homebridge-powerview-2) (last upstream commit Jan 2024, npm package abandoned). Adds resilience features for installs that see HomeKit tile drift on Gen 2 hubs.
 
-**Pull requests welcome!**
+**Install from this fork (not from npm):**
+
+```
+npm install github:omarshahine/homebridge-powerview-2
+```
+
+## What's different from upstream
+
+- **Coalesced post-move verify.** After every commanded move, schedule one RF query to the hub to catch motor stalls / hub-cache drift. Coalesced per shade — N rapid taps collapse to 1 verify, instead of N stacked timers churning HomeKit characteristic state.
+- **Configurable slow-shade list.** Some shades (heavy fabric, long travel) need a longer settle before the verify fires. Configure via `slowShades` + `slowVerifyDelay` in `config.json`.
+- **Cron sweep helper.** `scripts/powerview-refresh.sh` walks every shade with `?refresh=true` on a cron (default midnight + noon) to catch anything missed by the per-move verify (e.g. shades moved via Pebble remote).
+
+See [`docs/CABIN_NOTES.md`](docs/CABIN_NOTES.md) for the full rationale and the layered fix this fork bakes in.
+
+## New config keys
+
+```jsonc
+{
+  "platform": "PowerView",
+  "pollShadesForUpdate": true,        // upstream — recommended on Gen 2
+  "refreshShades": false,             // upstream — leave OFF on Gen 2 (HomeKit timeouts)
+
+  "enablePostMoveVerify": true,       // default true; set false to disable verify
+  "defaultVerifyDelay": 30000,        // ms; verify fires this long after setPosition
+  "slowVerifyDelay": 45000,           // ms; used for slowShades
+  "slowShades": [40237, 55357, 27062] // shade IDs that travel slowly
+}
+```
+
+## Original README
+
+
 
 This is a plugin for [Homebridge](https://github.com/nfarina/homebridge) to provide [HomeKit](https://www.apple.com/uk/ios/home/) support for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) window shades.
 

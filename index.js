@@ -63,6 +63,15 @@ function PowerViewPlatform(log, config, api) {
 		this.forceHorizontalShades = config["forceHorizontalShades"] || [];
 		this.forceVerticalShades = config["forceVerticalShades"] || [];
 
+		// Post-move verify: after each commanded move, RF-query the shade later
+		// to catch motor stalls / drift between hub-cached and physical position.
+		// Coalesced per-shade so N rapid taps collapse to 1 verify.
+		this.enablePostMoveVerify = config["enablePostMoveVerify"] !== false;
+		this.defaultVerifyDelay = config["defaultVerifyDelay"] || 30000;
+		this.slowVerifyDelay = config["slowVerifyDelay"] || 45000;
+		this.slowShades = config["slowShades"] || [];
+		this._verifyTimers = {};
+
 		this.api.on('didFinishLaunching', function () {
 			this.updateHubInfo();
 			if (this.pollShadesForUpdate) {
@@ -547,8 +556,28 @@ PowerViewPlatform.prototype.setPosition = function (shadeId, position, value, ca
 		if (!err) {
 			this.updateShadeValues(shade, true);
 			callback(null);
+			if (this.enablePostMoveVerify) {
+				this.scheduleVerify(shadeId, position);
+			}
 		} else {
 			callback(err);
 		}
 	}.bind(this));
+}
+
+// Schedule a coalesced post-move verify for a shade. If a prior verify is
+// pending for the same shade, cancel it and reschedule — so N rapid taps
+// collapse to 1 RF query.
+PowerViewPlatform.prototype.scheduleVerify = function (shadeId, position) {
+	if (this._verifyTimers[shadeId]) {
+		clearTimeout(this._verifyTimers[shadeId]);
+	}
+	var delay = this.slowShades.includes(shadeId) ? this.slowVerifyDelay : this.defaultVerifyDelay;
+	this._verifyTimers[shadeId] = setTimeout(function () {
+		delete this._verifyTimers[shadeId];
+		this.log("post-move verify %d/%d", shadeId, position);
+		this.updatePosition(shadeId, position, true, function (e) {
+			if (e) this.log("post-move verify failed for %d/%d: %s", shadeId, position, e.message);
+		}.bind(this));
+	}.bind(this), delay);
 }
