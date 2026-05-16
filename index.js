@@ -3,8 +3,6 @@ var hub = require('./PowerViewHub'),
 	Position = hub.Position;
 var Accessory, Service, Characteristic, UUIDGen;
 
-let ShadePollIntervalMs = 30000;
-
 let Shade = {
 	ROLLER: 1,
 	TOP_BOTTOM: 2,
@@ -13,7 +11,7 @@ let Shade = {
 }
 
 let ShadeTypes = {
-	ROLLER: [1, 5, 42],
+	ROLLER: [1, 5, 6, 42],
 	TOP_BOTTOM: [8],
 	HORIZONTAL: [18, 23],
 	VERTICAL: [16]
@@ -72,12 +70,28 @@ function PowerViewPlatform(log, config, api) {
 		this.slowShades = config["slowShades"] || [];
 		this._verifyTimers = {};
 
+		// Background poll: bulk GET /api/shades to keep HomeKit tiles populated
+		// from the hub's cache. 120s default — quiet logs, still fresh enough
+		// since post-move verify + heal sweep cover correctness.
+		this.pollIntervalMs = config["pollIntervalMs"] !== undefined ? config["pollIntervalMs"] : 120000;
+
+		// Heal sweep: sequential ?refresh=true walk across all shades. Each
+		// query is a real RF round-trip to the shade — catches drift the hub
+		// cache misses. Default 720 min (twice daily). 0 disables.
+		this.healSweepIntervalMinutes = config["healSweepIntervalMinutes"] !== undefined ? config["healSweepIntervalMinutes"] : 720;
+		this.healSweepGapMs = config["healSweepGapMs"] || 4000;
+		this._healInProgress = false;
+
 		this.api.on('didFinishLaunching', function () {
 			this.updateHubInfo();
 			if (this.pollShadesForUpdate) {
 				this.pollShades();
 			} else {
 				this.updateShades();
+			}
+			if (this.healSweepIntervalMinutes > 0) {
+				var intervalMs = this.healSweepIntervalMinutes * 60 * 1000;
+				setInterval(this.runHealSweep.bind(this), intervalMs);
 			}
 		}.bind(this));
 	}
@@ -147,7 +161,7 @@ PowerViewPlatform.prototype.addShadeAccessory = function (shade) {
 // Updates an existing shade accessory.
 PowerViewPlatform.prototype.updateShadeAcccessory = function (shade) {
 	var accessory = this.accessories[shade.id];
-	this.log("Updating shade %d: %s", shade.id, accessory.displayName);
+	this.log.debug("Updating shade %d: %s", shade.id, accessory.displayName);
 
 	var newType = this.shadeType(shade);
 	if (newType != accessory.context.shadeType) {
@@ -264,7 +278,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 
 	var positions = null;
 	if (shade.positions) {
-		this.log("Set for", shade.id, { 'positions': shade.positions });
+		this.log.debug("Set for", shade.id, { 'positions': shade.positions });
 		positions = {};
 
 		for (var i = 1; shade.positions['posKind' + i]; ++i) {
@@ -277,7 +291,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 				var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.BOTTOM);
 
 				if (current) {
-					this.log("Setting CurrentPosition to:", positions[Position.BOTTOM]);
+					this.log.debug("Setting CurrentPosition to:", positions[Position.BOTTOM]);
 
 					if (!isNaN(positions[Position.BOTTOM])) {
 						service.setCharacteristic(Characteristic.CurrentPosition, positions[Position.BOTTOM]);
@@ -286,7 +300,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 					}
 				}
 
-				this.log("Setting TargetPosition to:", positions[Position.BOTTOM]);
+				this.log.debug("Setting TargetPosition to:", positions[Position.BOTTOM]);
 
 				if (!isNaN(positions[Position.BOTTOM])) {
 					service.updateCharacteristic(Characteristic.TargetPosition, positions[Position.BOTTOM]);
@@ -294,7 +308,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 					this.log("Invalid position value:", positions[Position.BOTTOM]);
 				}
 
-				this.log("Setting PositionState to:", Characteristic.PositionState.STOPPED);
+				this.log.debug("Setting PositionState to:", Characteristic.PositionState.STOPPED);
 				service.setCharacteristic(Characteristic.PositionState, Characteristic.PositionState.STOPPED);
 
 				if (accessory.context.shadeType == Shade.HORIZONTAL) {
@@ -335,7 +349,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 				service.setCharacteristic(Characteristic.PositionState, Characteristic.PositionState.STOPPED);
 
 				if (current) {
-					this.log("Setting CurrentHorizontalTiltAngle to:", positions[Position.VANES]);
+					this.log.debug("Setting CurrentHorizontalTiltAngle to:", positions[Position.VANES]);
 
 					if (!isNaN(positions[Position.VANES])) {
 						service.setCharacteristic(Characteristic.CurrentHorizontalTiltAngle, positions[Position.VANES]);
@@ -344,7 +358,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 					}
 				}
 
-				this.log("Setting TargetHorizontalTiltAngle to:", positions[Position.VANES]);
+				this.log.debug("Setting TargetHorizontalTiltAngle to:", positions[Position.VANES]);
 
 				if (!isNaN(positions[Position.VANES])) {
 					service.updateCharacteristic(Characteristic.TargetHorizontalTiltAngle, positions[Position.VANES]);
@@ -423,7 +437,7 @@ PowerViewPlatform.prototype.pollShades = function () {
 	this.updateShades(function () {
 		setTimeout(function () {
 			this.pollShades();
-		}.bind(this), ShadePollIntervalMs);
+		}.bind(this), this.pollIntervalMs);
 	}.bind(this));
 }
 
@@ -580,4 +594,36 @@ PowerViewPlatform.prototype.scheduleVerify = function (shadeId, position) {
 			if (e) this.log("post-move verify failed for %d/%d: %s", shadeId, position, e.message);
 		}.bind(this));
 	}.bind(this), delay);
+}
+
+// Run a sequential ?refresh=true walk across all known shades. Each call is a
+// real RF round-trip to the shade — catches drift the hub cache misses. Spaced
+// to avoid hub overload and HomeKit characteristic timeouts. Replaces the
+// out-of-process cron sweep that previously lived in powerview-refresh.sh.
+PowerViewPlatform.prototype.runHealSweep = function () {
+	if (this._healInProgress) {
+		this.log("Heal sweep already in progress, skipping");
+		return;
+	}
+	var ids = Object.keys(this.accessories).map(function (k) { return parseInt(k); });
+	if (ids.length === 0) {
+		return;
+	}
+	this._healInProgress = true;
+	this.log("Heal sweep starting (%d shades, %dms gap)", ids.length, this.healSweepGapMs);
+	var i = 0;
+	var self = this;
+	var next = function () {
+		if (i >= ids.length) {
+			self._healInProgress = false;
+			self.log("Heal sweep complete (%d shades)", ids.length);
+			return;
+		}
+		var id = ids[i++];
+		self.updateShade(id, true, function (err) {
+			if (err) self.log.debug("Heal sweep error for %d: %s", id, (err && err.message) || err);
+			setTimeout(next, self.healSweepGapMs);
+		});
+	};
+	next();
 }
