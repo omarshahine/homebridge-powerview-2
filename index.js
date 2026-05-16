@@ -600,6 +600,12 @@ PowerViewPlatform.prototype.scheduleVerify = function (shadeId, position) {
 // real RF round-trip to the shade — catches drift the hub cache misses. Spaced
 // to avoid hub overload and HomeKit characteristic timeouts. Replaces the
 // out-of-process cron sweep that previously lived in powerview-refresh.sh.
+//
+// Calls hub.getShade directly (rather than this.updateShade) so we can pass
+// `current = true` to updateShadeValues, which pushes CurrentPosition via
+// setCharacteristic and notifies HomeKit subscribers. updateShade(..) only
+// touches TargetPosition, which would leave HomeKit's current value stale —
+// the exact drift the heal sweep is supposed to fix.
 PowerViewPlatform.prototype.runHealSweep = function () {
 	if (this._healInProgress) {
 		this.log("Heal sweep already in progress, skipping");
@@ -620,8 +626,14 @@ PowerViewPlatform.prototype.runHealSweep = function () {
 			return;
 		}
 		var id = ids[i++];
-		self.updateShade(id, true, function (err) {
-			if (err) self.log.debug("Heal sweep error for %d: %s", id, (err && err.message) || err);
+		self.hub.getShade(id, true, function (err, shade) {
+			if (err) {
+				self.log.debug("Heal sweep error for %d: %s", id, (err && err.message) || err);
+			} else if (shade && shade.timedOut) {
+				self.log.debug("Heal sweep RF timeout for %d", id);
+			} else if (shade) {
+				self.updateShadeValues(shade, true);
+			}
 			setTimeout(next, self.healSweepGapMs);
 		});
 	};
