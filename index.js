@@ -126,11 +126,9 @@ PowerViewPlatform.prototype.shadeType = function (shade) {
 PowerViewPlatform.prototype.configureAccessory = function (accessory) {
 	this.log("Cached shade %d: %s", accessory.context.shadeId, accessory.displayName);
 
-	accessory.reachable = true;
-
 	if (!accessory.context.shadeType) {
 		// Port over a pre-typing shade.
-		var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.TOP);
+		var service = accessory.getServiceById(Service.WindowCovering, SubType.TOP);
 		if (service) {
 			accessory.context.shadeType = Shade.TOP_BOTTOM;
 		} else {
@@ -187,7 +185,7 @@ PowerViewPlatform.prototype.configureShadeAccessory = function (accessory) {
 	var shadeId = accessory.context.shadeId;
 	this.accessories[shadeId] = accessory;
 
-	var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.BOTTOM);
+	var service = accessory.getServiceById(Service.WindowCovering, SubType.BOTTOM);
 	if (!service)
 		service = accessory.addService(Service.WindowCovering, accessory.displayName, SubType.BOTTOM);
 
@@ -253,7 +251,7 @@ PowerViewPlatform.prototype.configureShadeAccessory = function (accessory) {
 		}
 	}
 
-	service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.TOP);
+	service = accessory.getServiceById(Service.WindowCovering, SubType.TOP);
 	if (accessory.context.shadeType == Shade.TOP_BOTTOM) {
 		if (!service)
 			service = accessory.addService(Service.WindowCovering, accessory.displayName, SubType.TOP);
@@ -288,7 +286,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 			if (position == Position.BOTTOM) {
 				positions[Position.BOTTOM] = Math.round(100 * hubValue / 65535);
 
-				var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.BOTTOM);
+				var service = accessory.getServiceById(Service.WindowCovering, SubType.BOTTOM);
 
 				if (current) {
 					this.log.debug("Setting CurrentPosition to:", positions[Position.BOTTOM]);
@@ -340,7 +338,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 			if (position == Position.VANES && accessory.context.shadeType == Shade.HORIZONTAL) {
 				positions[Position.VANES] = Math.round(90 * hubValue / 32767);
 
-				var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.BOTTOM);
+				var service = accessory.getServiceById(Service.WindowCovering, SubType.BOTTOM);
 
 				// Once we have a vane position, the shade must be closed.
 				if (current)
@@ -371,7 +369,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 			if (position == Position.VANES && accessory.context.shadeType == Shade.VERTICAL) {
 				positions[Position.VANES] = 90 - Math.round(180 * hubValue / 65535);
 
-				var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.BOTTOM);
+				var service = accessory.getServiceById(Service.WindowCovering, SubType.BOTTOM);
 
 				// Once we have a vane position, the shade must be closed.
 				if (current)
@@ -387,7 +385,7 @@ PowerViewPlatform.prototype.updateShadeValues = function (shade, current) {
 			if (position == Position.TOP && accessory.context.shadeType == Shade.TOP_BOTTOM) {
 				positions[Position.TOP] = Math.round(100 * hubValue / 65535);
 
-				var service = accessory.getServiceByUUIDAndSubType(Service.WindowCovering, SubType.TOP);
+				var service = accessory.getServiceById(Service.WindowCovering, SubType.TOP);
 
 				if (current)
 					service.setCharacteristic(Characteristic.CurrentPosition, positions[Position.TOP]);
