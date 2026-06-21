@@ -1,5 +1,3 @@
-var request = require('request');
-
 let InitialRequestDelayMs = 100;
 let RequestIntervalMs = 100;
 
@@ -19,6 +17,43 @@ function PowerViewHub(log, host) {
 }
 exports.PowerViewHub = PowerViewHub;
 
+// Performs an HTTP request against the hub and parses the JSON response.
+// Preserves the callback(err, parsedBody) contract the rest of the plugin
+// expects, so callers stay synchronous-looking. Replaces the deprecated
+// `request` library with the native global fetch (Node 18+/22+).
+PowerViewHub.prototype.httpJson = function (path, options, callback) {
+	options = options || {};
+
+	var url = "http://" + this.host + path;
+	if (options.qs) {
+		var params = new URLSearchParams(options.qs);
+		url += "?" + params.toString();
+	}
+
+	var init = { method: options.method || 'GET' };
+	if (options.json !== undefined) {
+		init.headers = { 'Content-Type': 'application/json' };
+		init.body = JSON.stringify(options.json);
+	}
+
+	// Parse errors (network, non-200, bad JSON) are routed to callback(err)
+	// via the final onRejected handler. Delivery (callback(null, json)) lives
+	// in onFulfilled of that same .then, so a throw from the callback itself
+	// does NOT loop back into the error path and fire the callback twice.
+	fetch(url, init).then(function (response) {
+		if (response.status != 200) {
+			throw new Error("HTTP Error " + response.status);
+		}
+		return response.text();
+	}).then(function (text) {
+		return text ? JSON.parse(text) : {};
+	}).then(function (json) {
+		callback(null, json);
+	}, function (err) {
+		callback(err);
+	});
+}
+
 // Queue a shades API request.
 PowerViewHub.prototype.queueRequest = function(queued) {
 	if (!this.queue.length)
@@ -36,10 +71,7 @@ PowerViewHub.prototype.scheduleRequest = function(delay) {
 		var queued = this.queue[0];
 		this.queue[0] = {};
 
-		var options = {
-			url: "http://" + this.host + "/api/shades/" + queued.shadeId
-		}
-		
+		var options = {};
 		if (queued.data) {
 			options.method = 'PUT';
 			options.json = { 'shade': queued.data };
@@ -51,15 +83,12 @@ PowerViewHub.prototype.scheduleRequest = function(delay) {
 			options.qs = queued.qs;
 		}
 
-		request(options, function(err, response, body) {
-			if (!err && response.statusCode == 200) {
-				var json = queued.data ? body : JSON.parse(body);
+		this.httpJson("/api/shades/" + queued.shadeId, options, function(err, json) {
+			if (!err) {
 				for (var callback of queued.callbacks) {
 					callback(null, json.shade);
 				}
 			} else {
-				if (!err)
-					err = new Error("HTTP Error " + response.statusCode);
 				this.log("Error setting position: %s", err);
 				for (var callback of queued.callbacks) {
 					callback(err);
@@ -77,16 +106,10 @@ PowerViewHub.prototype.scheduleRequest = function(delay) {
 
 // Makes a userdata API request.
 PowerViewHub.prototype.getUserData = function(callback) {
-	request.get({
-		url: "http://" + this.host + "/api/userdata"
-	}, function(err, response, body) {
-		if (!err && response.statusCode == 200) {
-			var json = JSON.parse(body);
-
+	this.httpJson("/api/userdata", {}, function(err, json) {
+		if (!err) {
 			if (callback) callback(null, json.userData);
 		} else {
-			if (!err)
-				err = new Error("HTTP Error " + response.statusCode);
 			this.log("Error getting userdata: %s", err);
 			if (callback) callback(err);
 		}
@@ -95,16 +118,10 @@ PowerViewHub.prototype.getUserData = function(callback) {
 
 // Makes a shades API request.
 PowerViewHub.prototype.getShades = function(callback) {
-	request.get({
-		url: "http://" + this.host + "/api/shades"
-	}, function(err, response, body) {
-		if (!err && response.statusCode == 200) {
-			var json = JSON.parse(body);
-
+	this.httpJson("/api/shades", {}, function(err, json) {
+		if (!err) {
 			if (callback) callback(null, json.shadeData);
 		} else {
-			if (!err)
-				err = new Error("HTTP Error " + response.statusCode);
 			this.log("Error getting shades: %s", err);
 			if (callback) callback(err);
 		}
@@ -132,16 +149,10 @@ PowerViewHub.prototype.getShade = function(shadeId, refresh = false, callback) {
 		return;
 	}
 
-	request.get({
-		url: "http://" + this.host + "/api/shades/" + shadeId
-	}, function(err, response, body) {
-		if (!err && response.statusCode == 200) {
-			var json = JSON.parse(body);
-
+	this.httpJson("/api/shades/" + shadeId, {}, function(err, json) {
+		if (!err) {
 			if (callback) callback(null, json.shade);
 		} else {
-			if (!err)
-				err = new Error("HTTP Error " + response.statusCode);
 			this.log("Error getting shade: %s", err);
 			if (callback) callback(err);
 		}
