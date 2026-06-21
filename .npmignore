@@ -1,0 +1,19 @@
+# Dev tooling and agent state
+.github/
+.claude/
+.clawpatch/
+.vscode/
+.cursor/
+.gitignore
+AGENTS.md
+CLAUDE.md
+WORKLOG.md
+
+# Out-of-process helper scripts and notes (not needed at runtime)
+docs/
+scripts/
+
+# Logs and local artifacts
+*.log
+*.tgz
+.env

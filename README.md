@@ -1,43 +1,54 @@
-# homebridge-powerview-2 (omarshahine fork)
+# homebridge-powerview-gen2
 
-Personal fork of [`owenselles/homebridge-powerview-2`](https://github.com/owenselles/homebridge-powerview-2) (last upstream commit Jan 2024, npm package abandoned). Adds resilience features for installs that see HomeKit tile drift on Gen 2 hubs.
+[![npm](https://img.shields.io/npm/v/homebridge-powerview-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen2)
 
-**Install from this fork (not from npm):**
+Homebridge plugin for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) shades on **Generation 1 & 2 hubs**, with post-move verify and self-healing to keep HomeKit tiles accurate.
+
+A continuation of [`owenselles/homebridge-powerview-2`](https://github.com/owenselles/homebridge-powerview-2) (last upstream commit Jan 2024, npm package abandoned), republished under a maintained npm name with resilience features for installs that see HomeKit tile drift on Gen 2 hubs.
+
+## Installation
+
+Install from the Homebridge UI (search **Hunter Douglas PowerView (Gen 1 & 2)**), or from the command line:
 
 ```
-npm install github:omarshahine/homebridge-powerview-2
+npm install -g homebridge-powerview-gen2
 ```
 
-## What's different from upstream
+Then configure it from the Homebridge UI, or add the `PowerView` platform to your `config.json`:
+
+```json
+{
+  "platforms": [
+    { "platform": "PowerView" }
+  ]
+}
+```
+
+The hub is auto-discovered via the default `powerview-hub.local` mDNS name. The defaults work for most setups.
+
+## Resilience features
 
 - **Coalesced post-move verify.** After every commanded move, schedule one RF query to the hub to catch motor stalls / hub-cache drift. Coalesced per shade — N rapid taps collapse to 1 verify, instead of N stacked timers churning HomeKit characteristic state.
-- **Configurable slow-shade list.** Some shades (heavy fabric, long travel) need a longer settle before the verify fires. Configure via `slowShades` + `slowVerifyDelay` in `config.json`.
-- **Cron sweep helper.** `scripts/powerview-refresh.sh` walks every shade with `?refresh=true` on a cron (default midnight + noon) to catch anything missed by the per-move verify (e.g. shades moved via Pebble remote).
+- **In-plugin heal sweep.** A periodic sequential `?refresh=true` walk across every shade catches drift the hub cache misses (e.g. shades moved via a Pebble remote). Configurable via `healSweepIntervalMinutes` (default twice daily; `0` disables).
+- **Configurable slow-shade list.** Some shades (heavy fabric, long travel) need a longer settle before the verify fires. Configure via `slowShades` + `slowVerifyDelay`.
 
-See [`docs/CABIN_NOTES.md`](docs/CABIN_NOTES.md) for the full rationale and the layered fix this fork bakes in.
-
-## New config keys
+All options are editable from the Homebridge UI. See [`docs/CABIN_NOTES.md`](docs/CABIN_NOTES.md) for the full rationale.
 
 ```jsonc
 {
   "platform": "PowerView",
-  "pollShadesForUpdate": true,        // upstream — recommended on Gen 2
-  "refreshShades": false,             // upstream — leave OFF on Gen 2 (HomeKit timeouts)
+  "pollShadesForUpdate": true,        // recommended ON for Gen 2
+  "refreshShades": false,             // leave OFF on Gen 2 (HomeKit timeouts)
 
   "enablePostMoveVerify": true,       // default true; set false to disable verify
   "defaultVerifyDelay": 30000,        // ms; verify fires this long after setPosition
   "slowVerifyDelay": 45000,           // ms; used for slowShades
-  "slowShades": [40237, 55357, 27062] // shade IDs that travel slowly
+  "slowShades": [40237, 55357, 27062],// shade IDs that travel slowly
+  "healSweepIntervalMinutes": 720     // RF-refresh sweep interval; 0 to disable
 }
 ```
 
-## Original README
-
-
-
-This is a plugin for [Homebridge](https://github.com/nfarina/homebridge) to provide [HomeKit](https://www.apple.com/uk/ios/home/) support for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) window shades.
-
-Supports both the Generation 1 and 2 hubs.
+## About PowerView shades
 
 Supported Shades:
 
@@ -48,27 +59,9 @@ Supported Shades:
 
 Shades can participate in HomeKit scenes and automations.
 
-## Installation
-
-1. Install and setup [Homebridge](https://github.com/nfarina/homebridge).
-
-2. Install this plugin:
-```
-npm install -g homebridge-powerview-2
-```
-3. Add the `PowerView` Platform to your Homebridge `config.json`:
-
-```
-    "platforms" : [
-        {   
-            "platform" : "PowerView"
-        }
-    ]
-```
-
 ## Configuration
 
-Just specifying the platform should work for more people, the hub will be found using the default `powerview-hub.local` mDNS hostname.
+Just specifying the platform should work for most people — the hub is found using the default `powerview-hub.local` mDNS hostname.
 
 ### Hostname or IP
 

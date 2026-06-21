@@ -1,0 +1,120 @@
+{
+  "pluginAlias": "PowerView",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Homebridge plugin for Hunter Douglas PowerView shades (Generation 1 & 2 hubs). Shades are discovered automatically from the hub. Just save and restart — the defaults work for most setups.",
+  "footerDisplay": "For shade-type overrides and resilience tuning, see the [README](https://github.com/omarshahine/homebridge-powerview-2#readme).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "PowerView",
+        "required": true,
+        "description": "Plugin name as shown in the Homebridge log."
+      },
+      "host": {
+        "title": "Hub Hostname or IP",
+        "type": "string",
+        "placeholder": "powerview-hub.local",
+        "description": "Hostname or IP address of your PowerView hub. Leave blank to auto-discover via the default mDNS name."
+      },
+      "pollShadesForUpdate": {
+        "title": "Poll Shades For Updates",
+        "type": "boolean",
+        "default": false,
+        "description": "Continuously poll the hub so HomeKit tiles stay populated. Recommended ON for Gen 2 hubs."
+      },
+      "refreshShades": {
+        "title": "Refresh Shades On Read",
+        "type": "boolean",
+        "default": false,
+        "description": "Force a live RF query on every HomeKit read. Leave OFF on Gen 2 hubs — it causes HomeKit timeouts."
+      },
+      "pollIntervalMs": {
+        "title": "Poll Interval (ms)",
+        "type": "integer",
+        "default": 120000,
+        "minimum": 5000,
+        "description": "How often to bulk-poll the hub when polling is enabled. Default 120000 (2 minutes)."
+      },
+      "enablePostMoveVerify": {
+        "title": "Post-Move Verify",
+        "type": "boolean",
+        "default": true,
+        "description": "After each commanded move, schedule one RF query to catch motor stalls and hub-cache drift. Coalesced per shade."
+      },
+      "defaultVerifyDelay": {
+        "title": "Verify Delay (ms)",
+        "type": "integer",
+        "default": 30000,
+        "minimum": 1000,
+        "description": "How long after a move the verify query fires.",
+        "condition": {
+          "functionBody": "return model.enablePostMoveVerify !== false;"
+        }
+      },
+      "slowVerifyDelay": {
+        "title": "Slow-Shade Verify Delay (ms)",
+        "type": "integer",
+        "default": 45000,
+        "minimum": 1000,
+        "description": "Verify delay used for shades listed in Slow Shades (heavy fabric / long travel).",
+        "condition": {
+          "functionBody": "return model.enablePostMoveVerify !== false;"
+        }
+      },
+      "slowShades": {
+        "title": "Slow Shades",
+        "type": "array",
+        "description": "Shade IDs that travel slowly and need the longer verify delay.",
+        "items": {
+          "title": "Shade ID",
+          "type": "integer"
+        }
+      },
+      "healSweepIntervalMinutes": {
+        "title": "Heal Sweep Interval (minutes)",
+        "type": "integer",
+        "default": 720,
+        "minimum": 0,
+        "description": "Sequential RF-refresh walk across all shades to catch drift (e.g. shades moved by a Pebble remote). Default 720 (twice daily). Set 0 to disable."
+      },
+      "healSweepGapMs": {
+        "title": "Heal Sweep Gap (ms)",
+        "type": "integer",
+        "default": 4000,
+        "minimum": 500,
+        "description": "Delay between each shade during a heal sweep, to avoid overloading the hub.",
+        "condition": {
+          "functionBody": "return model.healSweepIntervalMinutes > 0;"
+        }
+      },
+      "forceRollerShades": {
+        "title": "Force Roller Shades",
+        "type": "array",
+        "description": "Shade IDs to force-treat as roller shades when the hub reports an unknown type.",
+        "items": { "title": "Shade ID", "type": "integer" }
+      },
+      "forceTopBottomShades": {
+        "title": "Force Top-Down/Bottom-Up Shades",
+        "type": "array",
+        "description": "Shade IDs to force-treat as top-down/bottom-up shades.",
+        "items": { "title": "Shade ID", "type": "integer" }
+      },
+      "forceHorizontalShades": {
+        "title": "Force Horizontal-Vane Shades",
+        "type": "array",
+        "description": "Shade IDs to force-treat as horizontal-vane shades (e.g. Silhouette, Pirouette).",
+        "items": { "title": "Shade ID", "type": "integer" }
+      },
+      "forceVerticalShades": {
+        "title": "Force Vertical-Vane Shades",
+        "type": "array",
+        "description": "Shade IDs to force-treat as vertical-vane shades (e.g. Luminette).",
+        "items": { "title": "Shade ID", "type": "integer" }
+      }
+    }
+  }
+}

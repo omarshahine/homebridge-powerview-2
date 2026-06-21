@@ -1,18 +1,34 @@
 {
-  "name": "homebridge-powerview-2",
+  "displayName": "Hunter Douglas PowerView (Gen 1 & 2)",
+  "name": "homebridge-powerview-gen2",
   "version": "1.1.0",
-  "description": "Updated Homebridge plugin for Hunter Douglas PowerView shades",
+  "description": "Homebridge plugin for Hunter Douglas PowerView shades on Generation 1 & 2 hubs, with post-move verify and self-healing to keep HomeKit tiles accurate.",
   "license": "ISC",
+  "author": {
+    "name": "Omar Shahine",
+    "url": "https://github.com/omarshahine"
+  },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homebridge",
+    "hunter-douglas",
+    "powerview",
+    "shades",
+    "blinds",
+    "window-covering",
+    "homekit",
+    "smart-home",
+    "home-automation"
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/owenselles/homebridge-powerview-2.git"
+    "url": "git+https://github.com/omarshahine/homebridge-powerview-2.git"
   },
   "bugs": {
-    "url": "http://github.com/owenselles/homebridge-powerview-2/issues"
+    "url": "https://github.com/omarshahine/homebridge-powerview-2/issues"
   },
+  "homepage": "https://github.com/omarshahine/homebridge-powerview-2#readme",
+  "main": "index.js",
   "engines": {
     "node": "^22 || ^24",
     "homebridge": "^1.6.0 || ^2.0.0"
