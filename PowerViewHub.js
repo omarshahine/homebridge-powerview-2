@@ -36,15 +36,20 @@ PowerViewHub.prototype.httpJson = function (path, options, callback) {
 		init.body = JSON.stringify(options.json);
 	}
 
+	// Parse errors (network, non-200, bad JSON) are routed to callback(err)
+	// via the final onRejected handler. Delivery (callback(null, json)) lives
+	// in onFulfilled of that same .then, so a throw from the callback itself
+	// does NOT loop back into the error path and fire the callback twice.
 	fetch(url, init).then(function (response) {
 		if (response.status != 200) {
 			throw new Error("HTTP Error " + response.status);
 		}
 		return response.text();
 	}).then(function (text) {
-		var json = text ? JSON.parse(text) : {};
+		return text ? JSON.parse(text) : {};
+	}).then(function (json) {
 		callback(null, json);
-	}).catch(function (err) {
+	}, function (err) {
 		callback(err);
 	});
 }
