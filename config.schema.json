@@ -39,6 +39,13 @@
         "minimum": 5000,
         "description": "How often to bulk-poll the hub when polling is enabled. Default 120000 (2 minutes)."
       },
+      "setPositionDebounceMs": {
+        "title": "Slider Debounce (ms)",
+        "type": "integer",
+        "default": 500,
+        "minimum": 0,
+        "description": "Wait this long after the last slider move before commanding the shade, so dragging sends one final position instead of chasing every intermediate value. A single tap is delayed by this window. Set 0 to send every change immediately."
+      },
       "enablePostMoveVerify": {
         "title": "Post-Move Verify",
         "type": "boolean",
