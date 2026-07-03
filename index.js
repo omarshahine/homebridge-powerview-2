@@ -578,7 +578,7 @@ PowerViewPlatform.prototype.setPosition = function (shadeId, position, value, ca
 		var pending = this._pendingPositions[key];
 		delete this._pendingPositions[key];
 		this.commitPosition(shadeId, position, pending, function (err) {
-			if (err) this.log("Deferred setPosition failed for %s: %s", key, err.message);
+			if (err) this.log("Deferred setPosition failed for %s: %s", key, err.message || err);
 		}.bind(this));
 	}.bind(this), this.setPositionDebounceMs);
 
