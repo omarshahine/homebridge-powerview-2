@@ -70,6 +70,16 @@ function PowerViewPlatform(log, config, api) {
 		this.slowShades = config["slowShades"] || [];
 		this._verifyTimers = {};
 
+		// Slider debounce: HomeKit fires a stream of TargetPosition.set calls as
+		// you drag the slider. Sending each one to the hub makes the shade chase
+		// every intermediate value before you settle. Instead we ack HomeKit
+		// immediately and only send the final value in a burst, so the shade
+		// moves once to the target. A single tap is just delayed by this window.
+		// Set to 0 to send every set immediately (legacy behavior).
+		this.setPositionDebounceMs = config["setPositionDebounceMs"] !== undefined ? config["setPositionDebounceMs"] : 500;
+		this._setTimers = {};
+		this._pendingPositions = {};
+
 		// Background poll: bulk GET /api/shades to keep HomeKit tiles populated
 		// from the hub's cache. 120s default — quiet logs, still fresh enough
 		// since post-move verify + heal sweep cover correctness.
@@ -547,6 +557,36 @@ PowerViewPlatform.prototype.setPosition = function (shadeId, position, value, ca
 		callback(new Error("Invalid value: " + value));
 		return;
 	}
+
+	// Debounce disabled: send straight to the hub.
+	if (!this.setPositionDebounceMs) {
+		this.commitPosition(shadeId, position, value, callback);
+		return;
+	}
+
+	// Coalesce rapid slider updates. Ack HomeKit immediately, remember the
+	// latest value, and (re)start a per-(shade,position) timer. Only the final
+	// value in a burst is sent to the hub, so the shade moves once to the
+	// target instead of chasing every intermediate drag value.
+	var key = shadeId + '/' + position;
+	this._pendingPositions[key] = value;
+	if (this._setTimers[key]) {
+		clearTimeout(this._setTimers[key]);
+	}
+	this._setTimers[key] = setTimeout(function () {
+		delete this._setTimers[key];
+		var pending = this._pendingPositions[key];
+		delete this._pendingPositions[key];
+		this.commitPosition(shadeId, position, pending, function (err) {
+			if (err) this.log("Deferred setPosition failed for %s: %s", key, err.message);
+		}.bind(this));
+	}.bind(this), this.setPositionDebounceMs);
+
+	callback(null);
+}
+
+// Converts a HomeKit position value to the hub scale and sends the move.
+PowerViewPlatform.prototype.commitPosition = function (shadeId, position, value, callback) {
 	switch (position) {
 		case Position.BOTTOM:
 			var hubValue = Math.round(65535 * value / 100);
