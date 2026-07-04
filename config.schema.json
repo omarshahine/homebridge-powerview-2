@@ -42,9 +42,9 @@
       "setPositionDebounceMs": {
         "title": "Slider Debounce (ms)",
         "type": "integer",
-        "default": 500,
+        "default": 1500,
         "minimum": 0,
-        "description": "Wait this long after the last slider move before commanding the shade, so dragging sends one final position instead of chasing every intermediate value. A single tap is delayed by this window. Set 0 to send every change immediately."
+        "description": "Wait this long after the last slider move before commanding the shade, so dragging sends one final position instead of chasing every intermediate value. HomeKit streams slider updates ~1s apart, so values below ~1000 tend to leak intermediate moves. A single tap is delayed by this window. Set 0 to send every change immediately."
       },
       "enablePostMoveVerify": {
         "title": "Post-Move Verify",

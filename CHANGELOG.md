@@ -5,9 +5,9 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
-- **Slider debounce** (`setPositionDebounceMs`, default 500ms). Dragging the
-  HomeKit slider fires a stream of position updates; the shade used to chase
-  every intermediate value. Now the plugin acks HomeKit instantly and only
+- **Slider debounce** (`setPositionDebounceMs`, default 1500ms). Dragging the
+  HomeKit slider fires a stream of position updates ~1s apart; the shade used to
+  chase every intermediate value. Now the plugin acks HomeKit instantly and only
   sends the final value in a burst, so the shade moves once to the target.
   Set to `0` for the previous send-every-change behavior.
 

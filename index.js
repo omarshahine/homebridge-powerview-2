@@ -76,7 +76,7 @@ function PowerViewPlatform(log, config, api) {
 		// immediately and only send the final value in a burst, so the shade
 		// moves once to the target. A single tap is just delayed by this window.
 		// Set to 0 to send every set immediately (legacy behavior).
-		this.setPositionDebounceMs = config["setPositionDebounceMs"] !== undefined ? config["setPositionDebounceMs"] : 500;
+		this.setPositionDebounceMs = config["setPositionDebounceMs"] !== undefined ? config["setPositionDebounceMs"] : 1500;
 		this._setTimers = {};
 		this._pendingPositions = {};
 
