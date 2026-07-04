@@ -123,6 +123,18 @@
           "functionBody": "return model.exposeScenes === true;"
         }
       },
+      "excludeScenes": {
+        "title": "Hide Scenes",
+        "type": "array",
+        "description": "Hub scenes to NOT expose as switches (and remove if already exposed). Enter the scene name as shown in the PowerView app (case-insensitive), or a numeric hub scene id. Useful for scenes that exist only for physical remotes and have no HomeKit purpose.",
+        "items": {
+          "title": "Scene Name or ID",
+          "type": "string"
+        },
+        "condition": {
+          "functionBody": "return model.exposeScenes === true;"
+        }
+      },
       "forceRollerShades": {
         "title": "Force Roller Shades",
         "type": "array",

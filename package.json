@@ -1,7 +1,7 @@
 {
   "displayName": "Hunter Douglas PowerView (Gen 1 & 2)",
   "name": "homebridge-powerview-gen2",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Homebridge plugin for Hunter Douglas PowerView shades on Generation 1 & 2 hubs, with post-move verify and self-healing to keep HomeKit tiles accurate.",
   "license": "ISC",
   "author": {

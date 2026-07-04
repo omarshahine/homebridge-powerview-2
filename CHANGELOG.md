@@ -2,9 +2,15 @@
 
 All notable changes to this project are documented here.
 
-## Unreleased
+## 1.2.0
 
 ### Added
+- **Hide scenes** (`excludeScenes`). A list of hub scenes to keep out of
+  HomeKit when `exposeScenes` is on. Match by scene name (case-insensitive) or
+  numeric hub scene id. Excluded scenes are never exposed as switches, and any
+  switch previously exposed for them is removed on the next reconcile. The scene
+  still lives on the hub for physical remotes and the PowerView app — only the
+  HomeKit switch is hidden. Useful for scenes that have no HomeKit purpose.
 - **Slider debounce** (`setPositionDebounceMs`, default 1500ms). Dragging the
   HomeKit slider fires a stream of position updates ~1s apart; the shade used to
   chase every intermediate value. Now the plugin acks HomeKit instantly and only

@@ -69,6 +69,26 @@ function PowerViewPlatform(log, config, api) {
 		this.sceneResetMs = config["sceneResetMs"] || 1000;
 		this.sceneAccessories = {};
 
+		// Scenes listed here are never exposed as switches, and any switch already
+		// exposed for them is removed on the next reconcile. Match is case-insensitive
+		// on the trimmed scene name; a numeric entry also matches the hub scene id
+		// (handy when two scenes share a name). Useful to hide hub scenes that exist
+		// only for physical remotes / the PowerView app and have no HomeKit purpose.
+		this.excludeSceneNames = {};
+		this.excludeSceneIds = {};
+		var excludeScenes = config["excludeScenes"] || [];
+		for (var ei = 0; ei < excludeScenes.length; ei++) {
+			var entry = excludeScenes[ei];
+			if (entry === undefined || entry === null) continue;
+			if (typeof entry === "number") {
+				this.excludeSceneIds[entry] = true;
+				continue;
+			}
+			var trimmed = String(entry).trim();
+			if (/^[0-9]+$/.test(trimmed)) this.excludeSceneIds[parseInt(trimmed, 10)] = true;
+			this.excludeSceneNames[trimmed.toLowerCase()] = true;
+		}
+
 		this.forceRollerShades = config["forceRollerShades"] || [];
 		this.forceTopBottomShades = config["forceTopBottomShades"] || [];
 		this.forceHorizontalShades = config["forceHorizontalShades"] || [];
@@ -480,6 +500,11 @@ PowerViewPlatform.prototype.updateScenes = function (callback) {
 		if (!err) {
 			var seen = {};
 			for (var scene of sceneData) {
+				// Excluded scenes are left out of `seen`, so the removal pass
+				// below tears down any switch previously exposed for them.
+				if (this.isSceneExcluded(scene)) {
+					continue;
+				}
 				seen[scene.id] = true;
 				if (!this.sceneAccessories[scene.id]) {
 					this.addSceneAccessory(scene);
@@ -497,6 +522,14 @@ PowerViewPlatform.prototype.updateScenes = function (callback) {
 
 		if (callback) callback(err);
 	}.bind(this));
+}
+
+// True if a hub scene should be hidden per the excludeScenes config — matched
+// by numeric hub scene id or by case-insensitive trimmed (decoded) name.
+PowerViewPlatform.prototype.isSceneExcluded = function (scene) {
+	if (this.excludeSceneIds[scene.id]) return true;
+	var name = Buffer.from(scene.name, 'base64').toString().trim().toLowerCase();
+	return this.excludeSceneNames[name] === true;
 }
 
 // Adds a new scene switch accessory.
