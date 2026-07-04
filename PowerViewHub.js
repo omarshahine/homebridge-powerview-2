@@ -128,6 +128,35 @@ PowerViewHub.prototype.getShades = function(callback) {
 	}.bind(this));
 }
 
+// Makes a scenes API request to list all scenes defined on the hub.
+PowerViewHub.prototype.getScenes = function(callback) {
+	this.httpJson("/api/scenes", {}, function(err, json) {
+		if (!err) {
+			if (callback) callback(null, json.sceneData || []);
+		} else {
+			this.log("Error getting scenes: %s", err);
+			if (callback) callback(err);
+		}
+	}.bind(this));
+}
+
+// Activates a scene by id. This is a single hub call — the hub then drives
+// every shade in the scene near-simultaneously over RF, which is far faster
+// than issuing per-shade position PUTs (those serialize through the queue at
+// ~2s each). Deliberately bypasses the shade queue: it's a distinct GET and
+// carries no /api/shades payload, so it can't collide with in-flight PUTs.
+PowerViewHub.prototype.activateScene = function(sceneId, callback) {
+	this.log("Activate scene", sceneId);
+	this.httpJson("/api/scenes", { qs: { sceneId: sceneId } }, function(err, json) {
+		if (!err) {
+			if (callback) callback(null, json);
+		} else {
+			this.log("Error activating scene %s: %s", sceneId, err);
+			if (callback) callback(err);
+		}
+	}.bind(this));
+}
+
 // Makes a shades API request for a single shade.
 PowerViewHub.prototype.getShade = function(shadeId, refresh = false, callback) {
 	// Refresh is handled through queued requests, because the PowerView hub likes to

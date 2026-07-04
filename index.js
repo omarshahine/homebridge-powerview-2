@@ -56,6 +56,19 @@ function PowerViewPlatform(log, config, api) {
 		this.refreshShades = config["refreshShades"] ? true : false;
 		this.pollShadesForUpdate = config["pollShadesForUpdate"] ? true : false;
 
+		// Scenes: expose each hub-defined scene as a momentary Switch. Activating
+		// it fires a single /api/scenes?sceneId=X call and the hub coordinates all
+		// shades at once — the fast path vs. a HomeKit scene that pokes each shade
+		// individually. Momentary (auto-resets off) so a HomeKit automation can
+		// trigger it: automations can set a Switch on, but cannot activate a
+		// StatelessProgrammableSwitch. sceneAccessories is keyed by hub scene id
+		// and kept separate from `accessories` (shades) so the two reconciliation
+		// passes never clobber each other.
+		this.exposeScenes = config["exposeScenes"] ? true : false;
+		this.sceneNamePrefix = config["sceneNamePrefix"] !== undefined ? config["sceneNamePrefix"] : "";
+		this.sceneResetMs = config["sceneResetMs"] || 1000;
+		this.sceneAccessories = {};
+
 		this.forceRollerShades = config["forceRollerShades"] || [];
 		this.forceTopBottomShades = config["forceTopBottomShades"] || [];
 		this.forceHorizontalShades = config["forceHorizontalShades"] || [];
@@ -99,6 +112,11 @@ function PowerViewPlatform(log, config, api) {
 			} else {
 				this.updateShades();
 			}
+			if (this.exposeScenes) {
+				this.updateScenes();
+			} else {
+				this.removeAllSceneAccessories();
+			}
 			if (this.healSweepIntervalMinutes > 0) {
 				var intervalMs = this.healSweepIntervalMinutes * 60 * 1000;
 				setInterval(this.runHealSweep.bind(this), intervalMs);
@@ -134,6 +152,12 @@ PowerViewPlatform.prototype.shadeType = function (shade) {
 
 // Called when a cached accessory is loaded to set up callbacks.
 PowerViewPlatform.prototype.configureAccessory = function (accessory) {
+	if (accessory.context.sceneId !== undefined) {
+		this.log("Cached scene %d: %s", accessory.context.sceneId, accessory.displayName);
+		this.configureSceneAccessory(accessory);
+		return;
+	}
+
 	this.log("Cached shade %d: %s", accessory.context.shadeId, accessory.displayName);
 
 	if (!accessory.context.shadeType) {
@@ -447,6 +471,111 @@ PowerViewPlatform.prototype.pollShades = function () {
 			this.pollShades();
 		}.bind(this), this.pollIntervalMs);
 	}.bind(this));
+}
+
+// Gets the current set of hub scenes, and reconciles the scene switches:
+// adds new ones, drops any that no longer exist on the hub.
+PowerViewPlatform.prototype.updateScenes = function (callback) {
+	this.hub.getScenes(function (err, sceneData) {
+		if (!err) {
+			var seen = {};
+			for (var scene of sceneData) {
+				seen[scene.id] = true;
+				if (!this.sceneAccessories[scene.id]) {
+					this.addSceneAccessory(scene);
+				}
+			}
+
+			for (var sceneId in this.sceneAccessories) {
+				if (!seen[sceneId]) {
+					this.removeSceneAccessory(this.sceneAccessories[sceneId]);
+				}
+			}
+		} else {
+			this.log("Error getting scenes: %s", (err && err.message) || err);
+		}
+
+		if (callback) callback(err);
+	}.bind(this));
+}
+
+// Adds a new scene switch accessory.
+PowerViewPlatform.prototype.addSceneAccessory = function (scene) {
+	var name = this.sceneNamePrefix + Buffer.from(scene.name, 'base64').toString();
+	this.log("Adding scene %d: %s", scene.id, name);
+
+	var uuid = UUIDGen.generate("scene-" + scene.id.toString());
+
+	var accessory = new Accessory(name, uuid);
+	accessory.context.sceneId = scene.id;
+	accessory.category = this.api.hap.Categories.SWITCH;
+
+	this.configureSceneAccessory(accessory);
+	this.api.registerPlatformAccessories("homebridge-powerview", "PowerView", [accessory]);
+
+	return accessory;
+}
+
+// Removes a scene switch accessory.
+PowerViewPlatform.prototype.removeSceneAccessory = function (accessory) {
+	this.log("Removing scene %d: %s", accessory.context.sceneId, accessory.displayName);
+	this.api.unregisterPlatformAccessories("homebridge-powerview", "PowerView", [accessory]);
+
+	delete this.sceneAccessories[accessory.context.sceneId];
+}
+
+// Tears down every scene switch — used when exposeScenes is turned off so
+// stale cached scene accessories don't linger in HomeKit.
+PowerViewPlatform.prototype.removeAllSceneAccessories = function () {
+	for (var sceneId in this.sceneAccessories) {
+		this.removeSceneAccessory(this.sceneAccessories[sceneId]);
+	}
+}
+
+// Sets up the momentary Switch for a scene accessory.
+PowerViewPlatform.prototype.configureSceneAccessory = function (accessory) {
+	var sceneId = accessory.context.sceneId;
+	this.sceneAccessories[sceneId] = accessory;
+
+	accessory.getService(Service.AccessoryInformation)
+		.setCharacteristic(Characteristic.Manufacturer, "Hunter Douglas")
+		.setCharacteristic(Characteristic.Model, "PowerView Scene");
+
+	var service = accessory.getService(Service.Switch);
+	if (!service)
+		service = accessory.addService(Service.Switch, accessory.displayName);
+
+	service
+		.getCharacteristic(Characteristic.On)
+		.removeAllListeners('get')
+		.removeAllListeners('set')
+		.on('get', function (callback) { callback(null, false); })
+		.on('set', this.setScene.bind(this, accessory));
+}
+
+// Characteristic callback for a scene switch's On.set. Activating (On=true)
+// fires the hub scene and then bounces the switch back off after sceneResetMs
+// so it reads as a momentary trigger. An explicit off is a no-op.
+PowerViewPlatform.prototype.setScene = function (accessory, value, callback) {
+	var sceneId = accessory.context.sceneId;
+
+	if (!value) {
+		callback(null);
+		return;
+	}
+
+	this.log("Activate scene %d: %s", sceneId, accessory.displayName);
+	this.hub.activateScene(sceneId, function (err) {
+		if (err) this.log("Scene %d activation failed: %s", sceneId, (err && err.message) || err);
+	}.bind(this));
+
+	// Ack HomeKit immediately; don't block the tile on the hub round-trip.
+	callback(null);
+
+	var service = accessory.getService(Service.Switch);
+	setTimeout(function () {
+		service.updateCharacteristic(Characteristic.On, false);
+	}.bind(this), this.sceneResetMs);
 }
 
 // Gets the hub information, and updates the accessories.

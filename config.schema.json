@@ -98,6 +98,31 @@
           "functionBody": "return model.healSweepIntervalMinutes > 0;"
         }
       },
+      "exposeScenes": {
+        "title": "Expose Hub Scenes",
+        "type": "boolean",
+        "default": false,
+        "description": "Expose each scene defined on the hub as a momentary switch. Activating it fires the scene in one hub call so all shades move together — far faster than a HomeKit scene that sets each shade individually. Turn a switch on from a HomeKit automation (e.g. a Pico button) to trigger the scene."
+      },
+      "sceneNamePrefix": {
+        "title": "Scene Name Prefix",
+        "type": "string",
+        "placeholder": "Scene: ",
+        "description": "Optional text prefixed to each scene switch's name, to tell scene switches apart from shades in the Home app.",
+        "condition": {
+          "functionBody": "return model.exposeScenes === true;"
+        }
+      },
+      "sceneResetMs": {
+        "title": "Scene Reset (ms)",
+        "type": "integer",
+        "default": 1000,
+        "minimum": 100,
+        "description": "How long a scene switch stays on before auto-resetting to off after activation.",
+        "condition": {
+          "functionBody": "return model.exposeScenes === true;"
+        }
+      },
       "forceRollerShades": {
         "title": "Force Roller Shades",
         "type": "array",
