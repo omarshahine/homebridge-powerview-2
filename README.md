@@ -34,6 +34,27 @@ The hub is auto-discovered via the default `powerview-hub.local` mDNS name. The 
 
 All options are editable from the Homebridge UI. See [`docs/CABIN_NOTES.md`](docs/CABIN_NOTES.md) for the full rationale.
 
+## Shade tools in the Homebridge UI
+
+Open the plugin's settings in the Homebridge UI and you get a shade console above the
+normal settings form. For every shade on the hub it shows the cached position, radio
+signal and power state, plus three actions:
+
+- **Check** — a real RF round-trip to the shade (`?refresh=true`), so you see where the
+  motor actually is and whether the radio answers.
+- **Jog** — small wiggle to prove the shade responds.
+- **Calibrate** — full up/down travel to relearn the shade's limits. Same as "Calibrate
+  Shade" in the PowerView app, but reachable from anywhere you can reach Homebridge.
+  Takes 1–2 minutes; don't interrupt it. The page re-checks the shade automatically
+  two minutes later.
+
+Below that, a collapsible list shows every hub scene, what position it sends each shade
+to (values that aren't exactly 0% / 100% are highlighted), and an **Activate** button.
+
+The tools talk to the hub configured in the plugin's `host` setting. See
+[`docs/SHADE_LIMITS.md`](docs/SHADE_LIMITS.md) for setting a shade's electronic top and
+bottom limits with a Pebble/Surface remote so scenes can use plain 0% / 50% / 100%.
+
 ```jsonc
 {
   "platform": "PowerView",

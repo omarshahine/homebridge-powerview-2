@@ -2,7 +2,8 @@
   "pluginAlias": "PowerView",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for Hunter Douglas PowerView shades (Generation 1 & 2 hubs). Shades are discovered automatically from the hub. Just save and restart — the defaults work for most setups.",
+  "customUi": true,
+  "headerDisplay": "Homebridge plugin for Hunter Douglas PowerView shades (Generation 1 & 2 hubs). Shades are discovered automatically from the hub. Just save and restart \u2014 the defaults work for most setups.",
   "footerDisplay": "For shade-type overrides and resilience tuning, see the [README](https://github.com/omarshahine/homebridge-powerview-2#readme).",
   "schema": {
     "type": "object",
@@ -30,7 +31,7 @@
         "title": "Refresh Shades On Read",
         "type": "boolean",
         "default": false,
-        "description": "Force a live RF query on every HomeKit read. Leave OFF on Gen 2 hubs — it causes HomeKit timeouts."
+        "description": "Force a live RF query on every HomeKit read. Leave OFF on Gen 2 hubs \u2014 it causes HomeKit timeouts."
       },
       "pollIntervalMs": {
         "title": "Poll Interval (ms)",
@@ -102,7 +103,7 @@
         "title": "Expose Hub Scenes",
         "type": "boolean",
         "default": false,
-        "description": "Expose each scene defined on the hub as a momentary switch. Activating it fires the scene in one hub call so all shades move together — far faster than a HomeKit scene that sets each shade individually. Turn a switch on from a HomeKit automation (e.g. a Pico button) to trigger the scene."
+        "description": "Expose each scene defined on the hub as a momentary switch. Activating it fires the scene in one hub call so all shades move together \u2014 far faster than a HomeKit scene that sets each shade individually. Turn a switch on from a HomeKit automation (e.g. a Pico button) to trigger the scene."
       },
       "sceneNamePrefix": {
         "title": "Scene Name Prefix",
@@ -139,25 +140,37 @@
         "title": "Force Roller Shades",
         "type": "array",
         "description": "Shade IDs to force-treat as roller shades when the hub reports an unknown type.",
-        "items": { "title": "Shade ID", "type": "integer" }
+        "items": {
+          "title": "Shade ID",
+          "type": "integer"
+        }
       },
       "forceTopBottomShades": {
         "title": "Force Top-Down/Bottom-Up Shades",
         "type": "array",
         "description": "Shade IDs to force-treat as top-down/bottom-up shades.",
-        "items": { "title": "Shade ID", "type": "integer" }
+        "items": {
+          "title": "Shade ID",
+          "type": "integer"
+        }
       },
       "forceHorizontalShades": {
         "title": "Force Horizontal-Vane Shades",
         "type": "array",
         "description": "Shade IDs to force-treat as horizontal-vane shades (e.g. Silhouette, Pirouette).",
-        "items": { "title": "Shade ID", "type": "integer" }
+        "items": {
+          "title": "Shade ID",
+          "type": "integer"
+        }
       },
       "forceVerticalShades": {
         "title": "Force Vertical-Vane Shades",
         "type": "array",
         "description": "Shade IDs to force-treat as vertical-vane shades (e.g. Luminette).",
-        "items": { "title": "Shade ID", "type": "integer" }
+        "items": {
+          "title": "Shade ID",
+          "type": "integer"
+        }
       }
     }
   }

@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.0
+
+### Added
+- **Shade tools in the Homebridge UI** (custom settings page). Per-shade
+  **Check** (real RF query), **Jog**, and **Calibrate** buttons, plus a hub
+  scene list with per-shade target positions and an Activate button. Lets you
+  recalibrate a shade remotely without the PowerView app. The regular settings
+  form is still shown underneath. Adds a runtime dependency on
+  `@homebridge/plugin-ui-utils`.
+- `docs/SHADE_LIMITS.md`: step-by-step guide to setting electronic top/bottom
+  limits with a Gen 2 Pebble/Surface remote (from Hunter Douglas' official
+  procedure), so scenes can be plain 0% / 50% / 100%.
+
 ## 1.2.0
 
 ### Added
