@@ -69,6 +69,7 @@
   var shades = {};       // id -> shade
   var busy = {};         // id -> true while an action is running
   var pending = {};      // id -> timer for post-calibrate auto-check
+  var armed = {};        // id -> timer for the in-page calibrate confirmation
   var rows = document.getElementById('pv-rows');
   var scenesEl = document.getElementById('pv-scenes');
 
@@ -119,7 +120,8 @@
         '<td class="pv-actions"><div class="pv-btns">' +
           '<button class="btn btn-sm btn-outline-primary" data-act="check"' + dis + '>Check</button>' +
           '<button class="btn btn-sm btn-outline-secondary" data-act="jog"' + dis + '>Jog</button>' +
-          '<button class="btn btn-sm btn-outline-danger" data-act="calibrate"' + dis + '>Calibrate</button>' +
+          '<button class="btn btn-sm ' + (armed[s.id] ? 'btn-danger' : 'btn-outline-danger') + '" data-act="calibrate"' + dis + '>' +
+            (armed[s.id] ? 'Confirm calibrate' : 'Calibrate') + '</button>' +
         '</div></td></tr>';
     }).join('');
   }
@@ -196,10 +198,6 @@
 
   async function motion(id, kind) {
     var name = shades[id] ? shades[id].name : '#' + id;
-    if (kind === 'calibrate') {
-      var ok = window.confirm('Calibrate "' + name + '"?\n\nThe shade will run fully up and fully down to relearn its limits (1–2 minutes). Do not stop it or send it other commands until it finishes.');
-      if (!ok) return;
-    }
     busy[id] = true; setStatus(id, '', kind === 'jog' ? 'Jogging…' : 'Sending calibrate…');
     try {
       await homebridge.request('/motion', { id: id, motion: kind });
@@ -232,11 +230,37 @@
     }
   }
 
+  // Calibrate is slow and must not be interrupted, so it needs a confirmation
+  // step. It cannot use window.confirm(): Config UI X renders plugin UIs inside a
+  // sandboxed iframe, and a sandbox without allow-modals makes confirm() return
+  // false without ever showing a dialog — the button then silently did nothing.
+  // Confirm in-page instead: first click arms the button, second click runs it.
+  var ARM_MS = 8000;
+
+  function disarm(id) {
+    if (!armed[id]) return;
+    clearTimeout(armed[id]);
+    delete armed[id];
+  }
+
+  function armCalibrate(id) {
+    var name = shades[id] ? shades[id].name : '#' + id;
+    armed[id] = setTimeout(function () { delete armed[id]; setStatus(id, '', ''); }, ARM_MS);
+    setStatus(id, 'bad', 'Press "Confirm calibrate" to run ' + name + ' fully up and down (1–2 min). ' +
+      'Do not interrupt it. Cancels itself in 8 s.');
+  }
+
   rows.addEventListener('click', function (ev) {
     var btn = ev.target.closest('button[data-act]');
     if (!btn) return;
     var id = parseInt(btn.closest('tr').getAttribute('data-id'), 10);
     var act = btn.getAttribute('data-act');
+    if (act === 'calibrate') {
+      if (armed[id]) { disarm(id); motion(id, 'calibrate'); }
+      else armCalibrate(id);
+      return;
+    }
+    disarm(id);
     if (act === 'check') check(id, false);
     else motion(id, act);
   });

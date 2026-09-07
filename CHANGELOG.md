@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.1
+
+### Fixed
+- **Calibrate button in the Homebridge UI silently did nothing** (#5). The
+  button gated the command behind `window.confirm()`, but Config UI X renders
+  plugin custom UIs in a sandboxed iframe, and a sandbox without `allow-modals`
+  suppresses the dialog and returns `false`. The handler returned at that guard
+  before its `try` block, so no request was sent and no toast or status was
+  shown either — the click was completely invisible. Confirmation is now done
+  in-page: the first click arms the button ("Confirm calibrate", solid red,
+  with a warning line), the second click runs it. The armed state cancels
+  itself after 8 seconds, and using any other action on the row disarms it.
+  `Check` and `Jog` were never affected.
+
 ## 1.3.0
 
 ### Added
