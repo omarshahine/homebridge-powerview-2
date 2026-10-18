@@ -79,12 +79,19 @@ PowerViewHub.prototype.scheduleRequest = function(delay) {
 			this.log("Put for", queued.shadeId, queued.data);
 		}
 
-		if (queued.qs) {
+		// A queued RF refresh can reach the front of the queue after the shade
+		// started moving (a scene bypasses this queue). Don't RF-query a moving
+		// shade: read the hub's cached value instead, flagged as not refreshed.
+		var downgraded = false;
+		if (queued.qs && queued.qs.refresh && this.isBusy && this.isBusy(queued.shadeId)) {
+			downgraded = true;
+		} else if (queued.qs) {
 			options.qs = queued.qs;
 		}
 
 		this.httpJson("/api/shades/" + queued.shadeId, options, function(err, json) {
 			if (!err) {
+				if (downgraded && json.shade) json.shade.notRefreshed = true;
 				for (var callback of queued.callbacks) {
 					callback(null, json.shade);
 				}
@@ -279,4 +286,38 @@ PowerViewHub.prototype.calibrateShade = function(shadeId, callback) {
 		'callbacks': [callback]
 	}
 	this.queueRequest(queued);
+}
+
+// Makes a shades API request to stop a moving shade. Supported by Gen 2 hubs
+// (API v2) as {"shade":{"motion":"stop"}}; Gen 1 hubs ignore it. Used by the
+// motion guard to halt a shade before sending it a new target, instead of
+// reversing it mid-travel.
+PowerViewHub.prototype.stopShade = function(shadeId, callback) {
+	for (var queued of this.queue) {
+		if (queued.shadeId == shadeId && queued.data && queued.data.motion == 'stop') {
+			queued.callbacks.push(callback);
+			return;
+		}
+	}
+
+	var queued = {
+		'shadeId': shadeId,
+		'data': { 'motion': 'stop' },
+		'callbacks': [callback]
+	}
+	this.queueRequest(queued);
+}
+
+// Lists the shades a scene moves (all scenes when sceneId is null), so the motion guard knows which shades are
+// travelling after a scene activation.
+PowerViewHub.prototype.getSceneMembers = function(sceneId, callback) {
+	var options = sceneId == null ? {} : { qs: { sceneId: sceneId } };
+	this.httpJson("/api/scenemembers", options, function(err, json) {
+		if (!err) {
+			if (callback) callback(null, json.sceneMemberData || []);
+		} else {
+			this.log("Error getting scene members: %s", err);
+			if (callback) callback(err);
+		}
+	}.bind(this));
 }

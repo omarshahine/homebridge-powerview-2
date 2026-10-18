@@ -27,5 +27,8 @@ jobs:
           node --check index.js
           node --check PowerViewHub.js
 
+      - name: Run tests
+        run: npm test
+
       - name: Validate config.schema.json
         run: node -e "JSON.parse(require('fs').readFileSync('config.schema.json','utf8'))"
