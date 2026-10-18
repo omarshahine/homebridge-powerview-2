@@ -30,7 +30,7 @@
   "homepage": "https://github.com/omarshahine/homebridge-powerview-2#readme",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": "^22 || ^24",
