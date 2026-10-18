@@ -79,12 +79,19 @@ PowerViewHub.prototype.scheduleRequest = function(delay) {
 			this.log("Put for", queued.shadeId, queued.data);
 		}
 
-		if (queued.qs) {
+		// A queued RF refresh can reach the front of the queue after the shade
+		// started moving (a scene bypasses this queue). Don't RF-query a moving
+		// shade: read the hub's cached value instead, flagged as not refreshed.
+		var downgraded = false;
+		if (queued.qs && queued.qs.refresh && this.isBusy && this.isBusy(queued.shadeId)) {
+			downgraded = true;
+		} else if (queued.qs) {
 			options.qs = queued.qs;
 		}
 
 		this.httpJson("/api/shades/" + queued.shadeId, options, function(err, json) {
 			if (!err) {
+				if (downgraded && json.shade) json.shade.notRefreshed = true;
 				for (var callback of queued.callbacks) {
 					callback(null, json.shade);
 				}
@@ -301,10 +308,11 @@ PowerViewHub.prototype.stopShade = function(shadeId, callback) {
 	this.queueRequest(queued);
 }
 
-// Lists the shades a scene moves, so the motion guard knows which shades are
+// Lists the shades a scene moves (all scenes when sceneId is null), so the motion guard knows which shades are
 // travelling after a scene activation.
 PowerViewHub.prototype.getSceneMembers = function(sceneId, callback) {
-	this.httpJson("/api/scenemembers", { qs: { sceneId: sceneId } }, function(err, json) {
+	var options = sceneId == null ? {} : { qs: { sceneId: sceneId } };
+	this.httpJson("/api/scenemembers", options, function(err, json) {
 		if (!err) {
 			if (callback) callback(null, json.sceneMemberData || []);
 		} else {

@@ -58,9 +58,9 @@
         "type": "integer",
         "default": 30000,
         "minimum": 1000,
-        "description": "How long after a move the verify query fires.",
+        "description": "How long a full move takes. Used as the delay before the verify query, and by the motion guard as the full-travel time.",
         "condition": {
-          "functionBody": "return model.enablePostMoveVerify !== false;"
+          "functionBody": "return model.enablePostMoveVerify !== false || model.enableMotionGuard !== false;"
         }
       },
       "slowVerifyDelay": {
@@ -68,9 +68,9 @@
         "type": "integer",
         "default": 45000,
         "minimum": 1000,
-        "description": "Verify delay used for shades listed in Slow Shades (heavy fabric / long travel).",
+        "description": "Full-move time for shades listed in Slow Shades (heavy fabric / long travel). Used by both post-move verify and the motion guard.",
         "condition": {
-          "functionBody": "return model.enablePostMoveVerify !== false;"
+          "functionBody": "return model.enablePostMoveVerify !== false || model.enableMotionGuard !== false;"
         }
       },
       "slowShades": {
@@ -104,6 +104,16 @@
         "default": 5000,
         "minimum": 0,
         "description": "Shortest time a shade counts as moving after a command. Travel time otherwise scales with distance, using the verify delays as the full-travel time.",
+        "condition": {
+          "functionBody": "return model.enableMotionGuard !== false;"
+        }
+      },
+      "knownPositionTtlMs": {
+        "title": "Trusted Position Lifetime (ms)",
+        "type": "integer",
+        "default": 600000,
+        "minimum": 0,
+        "description": "How long the motion guard trusts a shade's last known position when sizing the next move. After this (or if a remote may have moved it), the next move assumes full travel.",
         "condition": {
           "functionBody": "return model.enableMotionGuard !== false;"
         }

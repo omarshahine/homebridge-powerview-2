@@ -19,12 +19,20 @@ All notable changes to this project are documented here.
   a shade is moving:
   - a repeat of the same target is ignored;
   - a new target sends the hub's `stop` motion first, waits `stopSettleMs`,
-    then sends the latest target (any other rail still in flight is re-sent);
+    then sends the latest target. On top-down/bottom-up shades the other
+    rail's move is re-sent; on other shades the newest command wins, so an
+    old vane tilt can't cancel an open. If the stop fails, the new target
+    waits for the current move to finish instead;
   - post-move verify, heal sweep and refresh reads wait or use the cached
-    value instead of an RF query.
-  Hub scene activations mark their member shades as moving. The check is
-  local, so commands to an idle shade are not delayed. After a stop, the next
-  move assumes full travel because the halt point is unknown.
+    value instead of an RF query. The hub queue re-checks this just before
+    sending, so a refresh queued before a scene started is still caught.
+  A move waiting in the hub queue counts as busy, and its travel clock only
+  starts once the hub accepts it. Hub scene activations mark their member
+  shades as moving immediately, from scene members cached at startup. The
+  check is local, so commands to an idle shade are not delayed. The start
+  position used to size a move is trusted only from real RF reads or finished
+  moves, for at most `knownPositionTtlMs` (10 minutes), and is dropped after a
+  stop or when the hub reports the shade somewhere else.
 - Unit tests (`npm test`) for the motion guard, run in CI.
 
 ## 1.3.1
