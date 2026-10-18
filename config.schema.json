@@ -82,6 +82,32 @@
           "type": "integer"
         }
       },
+      "enableMotionGuard": {
+        "title": "Motion Guard",
+        "type": "boolean",
+        "default": true,
+        "description": "Treat a shade as moving for its expected travel time after each command. While it moves, repeat commands are ignored, a new target is preceded by a stop, and RF queries wait. Prevents command floods (e.g. rapid remote presses) that can leave a shade confused about its position. Commands to an idle shade are never delayed."
+      },
+      "stopSettleMs": {
+        "title": "Stop Settle (ms)",
+        "type": "integer",
+        "default": 2000,
+        "minimum": 0,
+        "description": "How long to wait after stopping a moving shade before sending its new target.",
+        "condition": {
+          "functionBody": "return model.enableMotionGuard !== false;"
+        }
+      },
+      "minMoveMs": {
+        "title": "Minimum Move Time (ms)",
+        "type": "integer",
+        "default": 5000,
+        "minimum": 0,
+        "description": "Shortest time a shade counts as moving after a command. Travel time otherwise scales with distance, using the verify delays as the full-travel time.",
+        "condition": {
+          "functionBody": "return model.enableMotionGuard !== false;"
+        }
+      },
       "healSweepIntervalMinutes": {
         "title": "Heal Sweep Interval (minutes)",
         "type": "integer",

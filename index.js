@@ -103,6 +103,23 @@ function PowerViewPlatform(log, config, api) {
 		this.slowShades = config["slowShades"] || [];
 		this._verifyTimers = {};
 
+		// Motion guard: the Gen 2 hub never reports whether a shade is moving,
+		// so a shade counts as moving for its expected travel time (the verify
+		// delay above) after each move command. While it is moving, a repeat of
+		// the same target is dropped, a new target is preceded by a stop plus a
+		// short settle, and RF refresh queries to it are held off. Reversing a
+		// shade mid-travel and RF-querying it while it moved is what left a shade
+		// stuck halfway, believing it was closed, until it was recalibrated.
+		this.enableMotionGuard = config["enableMotionGuard"] !== false;
+		this.stopSettleMs = config["stopSettleMs"] !== undefined ? config["stopSettleMs"] : 2000;
+		this.minMoveMs = config["minMoveMs"] !== undefined ? config["minMoveMs"] : 5000;
+		this._motion = {};
+		// Last position we trust, on the hub's raw scale: the target of a move
+		// that has run its course, or a real RF read. The hub's cached value is
+		// deliberately not used, since after a stop it still holds the old
+		// target rather than where the shade actually halted.
+		this._knownPositions = {};
+
 		// Slider debounce: HomeKit fires a stream of TargetPosition.set calls as
 		// you drag the slider. Sending each one to the hub makes the shade chase
 		// every intermediate value before you settle. Instead we ack HomeKit
@@ -599,7 +616,11 @@ PowerViewPlatform.prototype.setScene = function (accessory, value, callback) {
 
 	this.log("Activate scene %d: %s", sceneId, accessory.displayName);
 	this.hub.activateScene(sceneId, function (err) {
-		if (err) this.log("Scene %d activation failed: %s", sceneId, (err && err.message) || err);
+		if (err) {
+			this.log("Scene %d activation failed: %s", sceneId, (err && err.message) || err);
+			return;
+		}
+		if (this.enableMotionGuard) this.markSceneMoving(sceneId);
 	}.bind(this));
 
 	// Ack HomeKit immediately; don't block the tile on the hub round-trip.
@@ -633,8 +654,15 @@ PowerViewPlatform.prototype.updateHubInfo = function (callback) {
 
 // Gets the current shade information, and updates values.
 PowerViewPlatform.prototype.updateShade = function (shadeId, refresh = false, callback) {
+	// An RF query to a moving shade competes with its move; read the hub's
+	// cached value instead until it has finished travelling.
+	if (refresh && this.enableMotionGuard && this.isMoving(shadeId)) {
+		this.log.debug("Shade %d is moving, using cached position instead of RF refresh", shadeId);
+		refresh = false;
+	}
 	this.hub.getShade(shadeId, refresh, function (err, shade) {
 		if (!err) {
+			if (refresh) this.rememberRefreshed(shade);
 			var positions = this.updateShadeValues(shade);
 			var timedOut = refresh ? shade.timedOut : null;
 			if (callback) callback(null, positions, timedOut);
@@ -747,24 +775,85 @@ PowerViewPlatform.prototype.setPosition = function (shadeId, position, value, ca
 	callback(null);
 }
 
-// Converts a HomeKit position value to the hub scale and sends the move.
-PowerViewPlatform.prototype.commitPosition = function (shadeId, position, value, callback) {
+// Converts a HomeKit position value to the hub's raw scale.
+PowerViewPlatform.prototype.toHubValue = function (shadeId, position, value) {
 	switch (position) {
 		case Position.BOTTOM:
-			var hubValue = Math.round(65535 * value / 100);
-			break;
 		case Position.TOP:
-			var hubValue = Math.round(65535 * value / 100);
-			break;
+			return Math.round(65535 * value / 100);
 		case Position.VANES:
 			var accessory = this.accessories[shadeId];
 			if (accessory.context.shadeType == Shade.VERTICAL) {
-				var hubValue = Math.abs(Math.round(65535 * (value - 90) / 180));
-			} else {
-				var hubValue = Math.round(32767 * value / 90);
+				return Math.abs(Math.round(65535 * (value - 90) / 180));
 			}
-			break;
+			return Math.round(32767 * value / 90);
 	}
+}
+
+// Sends a move, unless the motion guard says the shade is already moving.
+// Deciding is a purely local check against our own record of recent moves, so
+// a command to an idle shade goes straight to the hub with no added latency.
+// Only a shade we believe is mid-travel pays for a stop plus stopSettleMs.
+PowerViewPlatform.prototype.commitPosition = function (shadeId, position, value, callback) {
+	var hubValue = this.toHubValue(shadeId, position, value);
+
+	if (this.enableMotionGuard && this.isMoving(shadeId)) {
+		var m = this._motion[shadeId];
+		if (m.stopping) {
+			// A stop is already on its way; the latest target wins.
+			m.pending[position] = value;
+			callback(null);
+			return;
+		}
+		var current = m.targets[position];
+		if (current && current.hubValue === hubValue) {
+			this.log("Shade %d/%d already moving to %d, ignoring repeat", shadeId, position, value);
+			callback(null);
+			return;
+		}
+		this.log("Shade %d/%d is moving, stopping it before new target %d", shadeId, position, value);
+		this.stopThenMove(shadeId, position, value);
+		callback(null);
+		return;
+	}
+
+	this.sendPosition(shadeId, position, value, hubValue, callback);
+}
+
+// Stops a moving shade, waits for it to settle, then sends the queued targets.
+// Every other position still in flight (e.g. the other rail of a top-down /
+// bottom-up shade) is re-sent too, since the stop halts the whole shade.
+PowerViewPlatform.prototype.stopThenMove = function (shadeId, position, value) {
+	var m = this._motion[shadeId];
+	var now = Date.now();
+	m.stopping = true;
+	m.pending = {};
+	for (var pos in m.targets) {
+		if (m.targets[pos].until > now) m.pending[pos] = m.targets[pos].value;
+	}
+	m.pending[position] = value;
+
+	this.hub.stopShade(shadeId, function (err, shade) {
+		if (err) this.log("Stop failed for %d: %s", shadeId, (err && err.message) || err);
+		setTimeout(function () {
+			var pending = m.pending;
+			delete this._motion[shadeId];
+			// Where it halted is unknown, so the next move assumes full travel.
+			delete this._knownPositions[shadeId];
+			for (let pos in pending) {
+				let p = parseInt(pos);
+				this.sendPosition(shadeId, p, pending[pos], this.toHubValue(shadeId, p, pending[pos]), function (e) {
+					if (e) this.log("Move after stop failed for %d/%d: %s", shadeId, p, (e && e.message) || e);
+				}.bind(this));
+			}
+		}.bind(this), this.stopSettleMs);
+	}.bind(this));
+}
+
+PowerViewPlatform.prototype.sendPosition = function (shadeId, position, value, hubValue, callback) {
+	// Record the move before the PUT goes out, so a command arriving while it
+	// sits in the hub queue already sees the shade as moving.
+	if (this.enableMotionGuard) this.markMoving(shadeId, position, value, hubValue);
 
 	this.hub.putShade(shadeId, position, hubValue, value, function (err, shade) {
 		if (!err) {
@@ -774,7 +863,120 @@ PowerViewPlatform.prototype.commitPosition = function (shadeId, position, value,
 				this.scheduleVerify(shadeId, position);
 			}
 		} else {
+			this.clearMoving(shadeId, position);
 			callback(err);
+		}
+	}.bind(this));
+}
+
+// Full-travel time for a shade, reusing the verify delays as the estimate.
+PowerViewPlatform.prototype.fullTravelMs = function (shadeId) {
+	return this.slowShades.includes(shadeId) ? this.slowVerifyDelay : this.defaultVerifyDelay;
+}
+
+// Best guess at where a shade is right now, on the hub's raw scale. While a
+// move is in flight we interpolate along it; otherwise we use the last value
+// the hub reported. Returns undefined when we have no idea.
+PowerViewPlatform.prototype.estimatePosition = function (shadeId, position) {
+	var m = this._motion[shadeId];
+	var t = m && m.targets[position];
+	if (t) {
+		var now = Date.now();
+		if (now >= t.until) return t.hubValue;
+		if (t.from === undefined) return undefined;
+		var frac = (now - t.start) / (t.until - t.start);
+		return Math.round(t.from + (t.hubValue - t.from) * frac);
+	}
+	var known = this._knownPositions[shadeId];
+	return known ? known[position] : undefined;
+}
+
+// Marks a shade as moving for as long as this move should take. The window
+// scales with distance (a 10% nudge is a fraction of a full run) so a shade
+// is not treated as busy any longer than it needs to be, with minMoveMs as a
+// floor for motor start-up and RF latency. Unknown start = full travel.
+PowerViewPlatform.prototype.markMoving = function (shadeId, position, value, hubValue) {
+	var now = Date.now();
+	var from = this.estimatePosition(shadeId, position);
+	var full = this.fullTravelMs(shadeId);
+	var range = position == Position.VANES ? 32767 : 65535;
+	var duration = from === undefined ? full
+		: Math.max(this.minMoveMs, Math.round(full * Math.min(1, Math.abs(hubValue - from) / range)));
+
+	var m = this._motion[shadeId] || (this._motion[shadeId] = { targets: {}, pending: {}, stopping: false });
+	m.targets[position] = { value: value, hubValue: hubValue, from: from, start: now, until: now + duration };
+	this.log.debug("Shade %d/%d moving to %d for ~%dms", shadeId, position, value, duration);
+}
+
+PowerViewPlatform.prototype.clearMoving = function (shadeId, position) {
+	var m = this._motion[shadeId];
+	if (!m || m.stopping) return;
+	delete m.targets[position];
+	if (Object.keys(m.targets).length === 0) delete this._motion[shadeId];
+}
+
+// True while a stop is pending or any position of the shade is in flight.
+PowerViewPlatform.prototype.isMoving = function (shadeId) {
+	var m = this._motion[shadeId];
+	if (!m) return false;
+	if (m.stopping) return true;
+	var now = Date.now();
+	for (var pos in m.targets) {
+		if (m.targets[pos].until > now) return true;
+	}
+	this.rememberPositions(shadeId, m.targets);
+	delete this._motion[shadeId];
+	return false;
+}
+
+// Records trusted raw positions for a shade, keyed by position kind.
+PowerViewPlatform.prototype.rememberPositions = function (shadeId, targets) {
+	var known = this._knownPositions[shadeId] || (this._knownPositions[shadeId] = {});
+	for (var pos in targets) {
+		if (targets[pos].hubValue !== undefined) known[pos] = targets[pos].hubValue;
+	}
+}
+
+// Records the positions from a real RF read of the shade.
+PowerViewPlatform.prototype.rememberRefreshed = function (shade) {
+	if (!shade || !shade.positions || shade.timedOut) return;
+	var targets = {};
+	for (var i = 1; shade.positions['posKind' + i]; ++i) {
+		targets[shade.positions['posKind' + i]] = { hubValue: shade.positions['position' + i] };
+	}
+	this.rememberPositions(shade.id, targets);
+}
+
+// Milliseconds until the shade should have finished moving (0 if idle).
+PowerViewPlatform.prototype.movingRemainingMs = function (shadeId) {
+	if (!this.isMoving(shadeId)) return 0;
+	var m = this._motion[shadeId];
+	if (m.stopping) return this.stopSettleMs;
+	var now = Date.now(), last = now;
+	for (var pos in m.targets) last = Math.max(last, m.targets[pos].until);
+	return last - now;
+}
+
+// After a hub scene fires, mark its member shades as moving (full travel,
+// target unknown) so a follow-up command stops them first and RF queries
+// wait for them to finish.
+PowerViewPlatform.prototype.markSceneMoving = function (sceneId) {
+	this.hub.getSceneMembers(sceneId, function (err, members) {
+		if (err) return;
+		var now = Date.now();
+		for (var member of members) {
+			var shadeId = member.shadeId;
+			if (!this.accessories[shadeId]) continue;
+			var m = this._motion[shadeId] || (this._motion[shadeId] = { targets: {}, pending: {}, stopping: false });
+			if (m.stopping) continue;
+			var positions = member.positions || {};
+			for (var i = 1; positions['posKind' + i]; ++i) {
+				var pos = positions['posKind' + i];
+				var hubValue = positions['position' + i];
+				var value = pos == Position.VANES ? Math.round(90 * hubValue / 32767) : Math.round(100 * hubValue / 65535);
+				m.targets[pos] = { value: value, hubValue: hubValue, from: undefined, start: now, until: now + this.fullTravelMs(shadeId) };
+			}
+			if (Object.keys(m.targets).length === 0) delete this._motion[shadeId];
 		}
 	}.bind(this));
 }
@@ -786,14 +988,21 @@ PowerViewPlatform.prototype.scheduleVerify = function (shadeId, position) {
 	if (this._verifyTimers[shadeId]) {
 		clearTimeout(this._verifyTimers[shadeId]);
 	}
-	var delay = this.slowShades.includes(shadeId) ? this.slowVerifyDelay : this.defaultVerifyDelay;
-	this._verifyTimers[shadeId] = setTimeout(function () {
+	var run = function () {
 		delete this._verifyTimers[shadeId];
+		// Still moving (a later move or a stop extended it): wait until it
+		// should be done, rather than RF-querying a shade mid-travel.
+		var remaining = this.enableMotionGuard ? this.movingRemainingMs(shadeId) : 0;
+		if (remaining > 0) {
+			this._verifyTimers[shadeId] = setTimeout(run, remaining);
+			return;
+		}
 		this.log("post-move verify %d/%d", shadeId, position);
 		this.updatePosition(shadeId, position, true, function (e) {
 			if (e) this.log("post-move verify failed for %d/%d: %s", shadeId, position, e.message);
 		}.bind(this));
-	}.bind(this), delay);
+	}.bind(this);
+	this._verifyTimers[shadeId] = setTimeout(run, this.fullTravelMs(shadeId));
 }
 
 // Run a sequential ?refresh=true walk across all known shades. Each call is a
@@ -826,12 +1035,18 @@ PowerViewPlatform.prototype.runHealSweep = function () {
 			return;
 		}
 		var id = ids[i++];
+		if (self.enableMotionGuard && self.isMoving(id)) {
+			self.log.debug("Heal sweep skipping %d: moving", id);
+			setTimeout(next, 0);
+			return;
+		}
 		self.hub.getShade(id, true, function (err, shade) {
 			if (err) {
 				self.log.debug("Heal sweep error for %d: %s", id, (err && err.message) || err);
 			} else if (shade && shade.timedOut) {
 				self.log.debug("Heal sweep RF timeout for %d", id);
 			} else if (shade) {
+				self.rememberRefreshed(shade);
 				self.updateShadeValues(shade, true);
 			}
 			setTimeout(next, self.healSweepGapMs);

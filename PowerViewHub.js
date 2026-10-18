@@ -280,3 +280,36 @@ PowerViewHub.prototype.calibrateShade = function(shadeId, callback) {
 	}
 	this.queueRequest(queued);
 }
+
+// Makes a shades API request to stop a moving shade. Supported by Gen 2 hubs
+// (API v2) as {"shade":{"motion":"stop"}}; Gen 1 hubs ignore it. Used by the
+// motion guard to halt a shade before sending it a new target, instead of
+// reversing it mid-travel.
+PowerViewHub.prototype.stopShade = function(shadeId, callback) {
+	for (var queued of this.queue) {
+		if (queued.shadeId == shadeId && queued.data && queued.data.motion == 'stop') {
+			queued.callbacks.push(callback);
+			return;
+		}
+	}
+
+	var queued = {
+		'shadeId': shadeId,
+		'data': { 'motion': 'stop' },
+		'callbacks': [callback]
+	}
+	this.queueRequest(queued);
+}
+
+// Lists the shades a scene moves, so the motion guard knows which shades are
+// travelling after a scene activation.
+PowerViewHub.prototype.getSceneMembers = function(sceneId, callback) {
+	this.httpJson("/api/scenemembers", { qs: { sceneId: sceneId } }, function(err, json) {
+		if (!err) {
+			if (callback) callback(null, json.sceneMemberData || []);
+		} else {
+			this.log("Error getting scene members: %s", err);
+			if (callback) callback(err);
+		}
+	}.bind(this));
+}

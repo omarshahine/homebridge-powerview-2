@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.4.0
+
+### Fixed
+- **Command floods could leave a shade confused about its position.** Nothing
+  stopped a command from reaching a shade that was still moving. In one burst
+  of rapid remote presses a shade got six moves in two minutes, including two
+  mid-travel reversals, two repeat closes, and an RF verify query that timed
+  out mid-sequence. It ended up stuck halfway while reporting closed, and only
+  a recalibration fixed it.
+
+### Added
+- **Motion guard** (`enableMotionGuard`, default on). The plugin records each
+  move and treats the shade as moving for its expected travel time, scaled by
+  distance with a `minMoveMs` floor and the verify delays as full travel. While
+  a shade is moving:
+  - a repeat of the same target is ignored;
+  - a new target sends the hub's `stop` motion first, waits `stopSettleMs`,
+    then sends the latest target (any other rail still in flight is re-sent);
+  - post-move verify, heal sweep and refresh reads wait or use the cached
+    value instead of an RF query.
+  Hub scene activations mark their member shades as moving. The check is
+  local, so commands to an idle shade are not delayed. After a stop, the next
+  move assumes full travel because the halt point is unknown.
+- Unit tests (`npm test`) for the motion guard, run in CI.
+
 ## 1.3.1
 
 ### Fixed

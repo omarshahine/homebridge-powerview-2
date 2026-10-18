@@ -30,6 +30,7 @@ The hub is auto-discovered via the default `powerview-hub.local` mDNS name. The 
 
 - **Coalesced post-move verify.** After every commanded move, schedule one RF query to the hub to catch motor stalls / hub-cache drift. Coalesced per shade — N rapid taps collapse to 1 verify, instead of N stacked timers churning HomeKit characteristic state.
 - **In-plugin heal sweep.** A periodic sequential `?refresh=true` walk across every shade catches drift the hub cache misses (e.g. shades moved via a Pebble remote). Configurable via `healSweepIntervalMinutes` (default twice daily; `0` disables).
+- **Motion guard.** The Gen 2 hub never says whether a shade is moving, so the plugin keeps its own record: after each command a shade counts as moving for its expected travel time, scaled by distance (a 10% nudge is not a full run). While it moves, a repeat of the same target is ignored, a new target is preceded by a hub `stop` and a short settle instead of a mid-travel reversal, and RF queries (verify, heal sweep) wait until it is done. Scene activations mark their member shades as moving too. The check is local, so a command to an idle shade goes out with no extra latency. Rapid reversals and RF queries mid-travel can leave a shade believing it is closed while stuck halfway, which then needs a recalibration. Tune with `enableMotionGuard`, `stopSettleMs` and `minMoveMs`.
 - **Configurable slow-shade list.** Some shades (heavy fabric, long travel) need a longer settle before the verify fires. Configure via `slowShades` + `slowVerifyDelay`.
 
 All options are editable from the Homebridge UI. See [`docs/CABIN_NOTES.md`](docs/CABIN_NOTES.md) for the full rationale.
@@ -65,6 +66,9 @@ bottom limits with a Pebble/Surface remote so scenes can use plain 0% / 50% / 10
   "defaultVerifyDelay": 30000,        // ms; verify fires this long after setPosition
   "slowVerifyDelay": 45000,           // ms; used for slowShades
   "slowShades": [40237, 55357, 27062],// shade IDs that travel slowly
+  "enableMotionGuard": true,          // stop-then-move, drop repeats, no RF mid-travel
+  "stopSettleMs": 2000,               // ms between a stop and the new target
+  "minMoveMs": 5000,                  // floor on how long a shade counts as moving
   "healSweepIntervalMinutes": 720     // RF-refresh sweep interval; 0 to disable
 }
 ```
