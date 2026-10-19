@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.4.1
+
+### Changed
+- Renamed the plugin to **Hunter Douglas PowerView (Gen 2)** in the Homebridge
+  UI. The npm package (`homebridge-powerview-gen2`) and the `PowerView`
+  platform alias are unchanged, so existing configs and cached shades keep
+  working.
+
 ## 1.4.0
 
 ### Fixed

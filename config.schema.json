@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Homebridge plugin for Hunter Douglas PowerView shades (Generation 1 & 2 hubs). Shades are discovered automatically from the hub. Just save and restart \u2014 the defaults work for most setups.",
+  "headerDisplay": "Homebridge plugin for Hunter Douglas PowerView shades on Generation 2 hubs. Shades are discovered automatically from the hub. Just save and restart \u2014 the defaults work for most setups.",
   "footerDisplay": "For shade-type overrides and resilience tuning, see the [README](https://github.com/omarshahine/homebridge-powerview-2#readme).",
   "schema": {
     "type": "object",

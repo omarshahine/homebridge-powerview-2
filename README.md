@@ -2,13 +2,13 @@
 
 [![npm](https://img.shields.io/npm/v/homebridge-powerview-gen2.svg)](https://www.npmjs.com/package/homebridge-powerview-gen2)
 
-Homebridge plugin for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) shades on **Generation 1 & 2 hubs**, with post-move verify and self-healing to keep HomeKit tiles accurate.
+Homebridge plugin for [Hunter Douglas PowerView](https://www.hunterdouglas.com/operating-systems/motorized/powerview-motorization) shades on **PowerView Generation 2 hubs**, with post-move verify and self-healing to keep HomeKit tiles accurate.
 
 A continuation of [`owenselles/homebridge-powerview-2`](https://github.com/owenselles/homebridge-powerview-2) (last upstream commit Jan 2024, npm package abandoned), republished under a maintained npm name with resilience features for installs that see HomeKit tile drift on Gen 2 hubs.
 
 ## Installation
 
-Install from the Homebridge UI (search **Hunter Douglas PowerView (Gen 1 & 2)**), or from the command line:
+Install from the Homebridge UI (search **Hunter Douglas PowerView (Gen 2)**), or from the command line:
 
 ```
 npm install -g homebridge-powerview-gen2
